@@ -46,13 +46,14 @@ def tails_differ(name_a: str, name_b: str):
     tail_a = norm(name_a.split(",")[-1]) if "," in name_a else ""
     tail_b = norm(name_b.split(",")[-1]) if "," in name_b else ""
     return fuzz.token_sort_ratio(tail_a, tail_b) / 100 < TAIL_MATCH
+
 def one_word_swap(na,nb):
     """Check if the two names differ by only one word."""
     words_a = na.split()
     words_b = nb.split()
     if len(words_a) != len(words_b):
         return False
-    diff_count = sum(1 for a, b in zip(words_a, words_b) if a != b)
+    diff_count = sum(1 for a, b in zip(words_a, words_b) if a != b and (fuzz.ratio(a, b) < 65))
     return diff_count == 1
 
 def decide(name_a: str, name_b: str) -> str:
