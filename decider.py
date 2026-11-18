@@ -17,8 +17,11 @@ import re
 from rapidfuzz import fuzz
 
 TAIL_MATCH = 0.90  # how similar the last comma-part of two names must be to count as "same unit"
-GENERIC_SUFFIX = {"university", "college", "school", "institute", "center", "centre", "laboratory", "lab", "department",
-                  "faculty", "division", "unit", "institute of technology", "institute of science", "institute of engineering", "institute of management", "institute of business", "institute of medicine", "institute of health", "institute of research", "institute of education", "institute of arts", "institute of design"}
+# One extra word that marks a PART of the other name ("X Library", "X Department"): such a pair is a hierarchy, not a duplicate.
+# Words are single words after norm() (so "center" is already "centre", "lab" is "laboratory"). "university" and "centre" are NOT
+# here: "RWTH Aachen" and "RWTH Aachen University" are the same institution (see experiments/suffix_evidence.py).
+GENERIC_SUFFIX = {"college", "school", "institute", "laboratory", "department", "faculty", "division", "unit",
+                  "library", "libraries", "group", "press", "partners"}
 
 # ---- settings you can tune (try changing these first) -----------------------------------------------------------
 DUPLICATE_FUZZY = 0.90     # fuzzy score at or above this may mean "duplicate"
@@ -47,7 +50,8 @@ def tails_differ(name_a: str, name_b: str):
     tail_b = norm(name_b.split(",")[-1]) if "," in name_b else ""
     return fuzz.token_sort_ratio(tail_a, tail_b) / 100 < TAIL_MATCH
 
-def one_word_swap(na,nb):
+
+def one_word_swap(na, nb):
     """Check if the two names differ by only one word."""
     words_a = na.split()
     words_b = nb.split()
@@ -55,6 +59,7 @@ def one_word_swap(na,nb):
         return False
     diff_count = sum(1 for a, b in zip(words_a, words_b) if a != b and (fuzz.ratio(a, b) < 65))
     return diff_count == 1
+
 
 def decide(name_a: str, name_b: str) -> str:
     na, nb = norm(name_a), norm(name_b)
