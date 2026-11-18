@@ -17,6 +17,8 @@ import re
 from rapidfuzz import fuzz
 
 TAIL_MATCH = 0.90  # how similar the last comma-part of two names must be to count as "same unit"
+GENERIC_SUFFIX = {"university", "college", "school", "institute", "center", "centre", "laboratory", "lab", "department",
+                  "faculty", "division", "unit", "institute of technology", "institute of science", "institute of engineering", "institute of management", "institute of business", "institute of medicine", "institute of health", "institute of research", "institute of education", "institute of arts", "institute of design"}
 
 # ---- settings you can tune (try changing these first) -----------------------------------------------------------
 DUPLICATE_FUZZY = 0.90     # fuzzy score at or above this may mean "duplicate"
@@ -44,7 +46,14 @@ def tails_differ(name_a: str, name_b: str):
     tail_a = norm(name_a.split(",")[-1]) if "," in name_a else ""
     tail_b = norm(name_b.split(",")[-1]) if "," in name_b else ""
     return fuzz.token_sort_ratio(tail_a, tail_b) / 100 < TAIL_MATCH
-
+def one_word_swap(na,nb):
+    """Check if the two names differ by only one word."""
+    words_a = na.split()
+    words_b = nb.split()
+    if len(words_a) != len(words_b):
+        return False
+    diff_count = sum(1 for a, b in zip(words_a, words_b) if a != b)
+    return diff_count == 1
 
 def decide(name_a: str, name_b: str) -> str:
     na, nb = norm(name_a), norm(name_b)
@@ -62,6 +71,8 @@ def decide(name_a: str, name_b: str) -> str:
     if (len(long_name) != len(short_name)):
         if (long_name.startswith(short_name)):
             Extra = long_name[len(short_name):].split()
+            if len(Extra) == 1 and Extra[0] in GENERIC_SUFFIX:
+                return "hierarchy"
             count = len(Extra)
             if ("," not in name_a and "," not in name_b and count <= 1):
                 return "duplicate"
@@ -71,7 +82,7 @@ def decide(name_a: str, name_b: str) -> str:
         # print("Exact match fired for:", na, nb)
         return "duplicate"
     # TODO 2: if the fuzzy score is very high, what are they?
-    if fuzz.token_sort_ratio(na, nb) / 100 >= DUPLICATE_FUZZY and not tails_differ(name_a, name_b):
+    if fuzz.token_sort_ratio(na, nb) / 100 >= DUPLICATE_FUZZY and not tails_differ(name_a, name_b) and not one_word_swap(na, nb):
         # print("Fuzzy score fired for:", na, nb)
         return "duplicate"
 
