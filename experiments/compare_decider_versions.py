@@ -15,6 +15,7 @@ import types
 from collections import Counter
 
 import pandas as pd
+from rapidfuzz import fuzz
 
 sys.path.insert(0, os.getcwd())
 ref = sys.argv[1] if len(sys.argv) > 1 else "HEAD"
@@ -39,10 +40,20 @@ print(f"decisions changed: {len(rows)}   fixed (wrong -> right): {len(now_right)
 print("changes by (old answer -> new answer):", dict(Counter((r[3], r[4]) for r in rows)))
 
 
+def word_diff(a, b):
+    """The words only one name has, after norm(), and how alike the two sides are (0-100), e.g. 'ohio ~ iowa  ratio 25'."""
+    wa, wb = set(new.norm(a).split()), set(new.norm(b).split())
+    da, db = sorted(wa - wb), sorted(wb - wa)
+    if not da or not db:
+        return "-"
+    return f"{' '.join(da)} ~ {' '.join(db)}  ratio {fuzz.ratio(' '.join(da), ' '.join(db)):.0f}"
+
+
 def show(title, items, k=15):
     print(f"\n{title} (first {min(k, len(items))} of {len(items)})")
     for a, b, lab, o, n in items[:k]:
         print(f"  judge={lab:<9} {o:<9} -> {n:<9} | {a} | {b}")
+        print(f"      differing words: {word_diff(a, b)}")
 
 
 show("BROKE: was right, now wrong", now_wrong)
