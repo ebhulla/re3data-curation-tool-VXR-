@@ -4,3 +4,6 @@ echo "venv/" >> .gitignore
 __pycache__/
 *.pyc
 .pytest_cache/
+
+out/
+review/*.xlsx
