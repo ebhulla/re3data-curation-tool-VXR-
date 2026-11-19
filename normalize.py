@@ -35,7 +35,8 @@ def normalize(input_csv: str, out_dir: str) -> dict:
     flags.to_csv(os.path.join(out_dir, "review_list.csv"), index=False, encoding="utf-8")
 
     n_clusters = table.cluster_id.nunique()
-    biggest = table.groupby("cluster_id").size().sort_values(ascending=False).head(5)
+    sizes = table.groupby(["cluster_id", "canonical_name"]).size().reset_index(name="n")
+    biggest = sizes.sort_values(["n", "canonical_name"], ascending=[False, True]).head(5)     # ties broken by name, so the order is fixed
     lines = [
         f"input rows (repository-institution links): {len(inst)}",
         f"distinct names: {len(table)}",
@@ -46,8 +47,8 @@ def normalize(input_csv: str, out_dir: str) -> dict:
         "",
         "five largest clusters (number of spellings, canonical name):",
     ]
-    for cid, size in biggest.items():
-        lines.append(f"  {size:>3}  {table.loc[table.cluster_id == cid, 'canonical_name'].iloc[0]}")
+    for _, row in biggest.iterrows():
+        lines.append(f"  {row.n:>3}  {row.canonical_name}")
     with open(os.path.join(out_dir, "report.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     return {"names": len(table), "clusters": n_clusters, "flagged": len(flags), "report": "\n".join(lines)}
