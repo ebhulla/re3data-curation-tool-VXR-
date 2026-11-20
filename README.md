@@ -4,14 +4,62 @@ This project pulls repository data from the re3data API and stores it in a
 Postgres database. It has four tables: `repositories`, `subjects`,
 `contacts`, and `institutions`.
 
+## Normalize institution names (the main tool)
+
+The same institution appears in re3data under many spellings ("Université de Montpellier", "University of Montpellier"), and
+departments are listed next to their universities. `normalize.py` groups the spellings of each institution, picks one canonical
+name, and links a unit (a library, department) to its parent institution without merging the two.
+
+```bash
+pip install -r requirements.txt                          # once
+python normalize.py                                         # reads data/institutions_clean.csv, writes to out/
+```
+
+Use `--input` and `--out` for other files: `python normalize.py --input my_names.csv --out results/`.
+The input is a CSV with the columns `repo_id` and `institution_name`.
+
+| Output (in `out/`) | What it is |
+|---|---|
+| `normalized_names.csv` | one row per distinct name: `cluster_id`, `canonical_name`, `parent_name`, `parent_canonical`, `n_repos`, `cluster_size` |
+| `review_list.csv` | names a human should check, with the reason (rules in `review.py`) |
+| `report.txt` | counts and the five largest clusters |
+
+On the current data it turns 6,148 names into 5,589 institutions (559 spellings merged) and finds 1,455 parent links.
+
+How it works, in five steps: **blocking** (only compare names that share a rare word: 18.9 million possible pairs become about 270,000),
+**decider** (`decider.py`: simple rules label each pair duplicate, hierarchy or unrelated), **clusters** (`cluster.py`: duplicates merge),
+**canonical name** (the spelling used by the most repositories) and **parent links** (a name like "A, B, C" links to "A, B" or "A").
+It uses rules only, so the same input always gives the same output.
+
+Known limits: the rules miss abbreviations and translations, and a few groups are chained together through a shared short name
+(for example CLARIAH-ES, CLARIAH-NL and CLARIAH). Merge quality was measured on a random sample judged by an AI model, not by
+people; see `docs/poster_facts.md` for the numbers and how they were measured, and `docs/AUTHORSHIP.md` for who wrote what.
+
+Tests: `python -m pytest tests -q`.
+
 ## Project files
 
-- `fetch.py` — gets data from the re3data API
-- `parse.py` — turns the raw XML into clean fields
-- `db.py` — saves data into the database
-- `main.py` — runs the full pipeline (fetch, parse, save) for all repositories
-- `export.py` — exports the database to an Excel file
-- `schema.sql` — creates the database tables
+- `ingest/fetch.py` — gets data from the re3data API
+- `ingest/parse.py` — turns the raw XML into clean fields
+- `ingest/db.py` — saves data into the database
+- `ingest/main.py` — runs the full pipeline (fetch, parse, save) for all repositories
+- `ingest/export.py` — exports the database to an Excel file
+- `ingest/schema.sql` — creates the database tables
+
+## Repository layout (reorganized Oct 2026)
+
+Run everything from the repository root, e.g. `python pipeline/judge.py ...`.
+
+| Folder / file | What it holds |
+|---|---|
+| `normalize.py`, `decider.py`, `cluster.py`, `review.py`, `evaluate_decider.py` | The one-command tool, the rule-based pair decider, clustering and parent links, the human-review flags, and the harness that scores the decider |
+| `pipeline/` | Data and labeling pipeline: ROR matching, candidate/mined pairs, the LLM judge, train/val/test split |
+| `experiments/` | Baselines, fine-tuning, error analysis, robustness checks, the combined pair model, clustering demo |
+| `slurm/` | Negishi job scripts (judge labeling, fine-tuning sweep) |
+| `ingest/` | The original re3data -> Postgres ingestion (`fetch`, `parse`, `db`, `main`, `export`, `schema.sql`) |
+| `exercises/`, `tests/` | PyTorch exercises (stubs/solutions) and the test suite (`python -m pytest tests -q`) |
+| `docs/` | Results notes, learning log, authorship record, Negishi setup, cheat sheet |
+| `data/` | Inputs, labels and splits |
 
 ## Starting Postgres
 
@@ -83,7 +131,7 @@ If the tables do not exist yet, or you want to start clean:
 
 ```bash
 sudo su - postgres -c "psql -d re3data_toolkit -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'"
-sudo su - postgres -c "psql -d re3data_toolkit -f schema.sql"
+sudo su - postgres -c "psql -d re3data_toolkit -f ingest/schema.sql"
 ```
 
 The first command wipes everything. Only run it if you mean to.
@@ -96,14 +144,14 @@ repositories.
 
 ```bash
 source venv/bin/activate
-python -u main.py
+python -u ingest/main.py
 ```
 
 To run it in the background, so it keeps going even if you close the
 terminal:
 
 ```bash
-nohup python -u main.py > run_output.log 2>&1 &
+nohup python -u ingest/main.py > run_output.log 2>&1 &
 ```
 
 Check progress with:
@@ -117,7 +165,7 @@ Failed records (if any) are logged to `ingest_failures.log`.
 ## Exporting to Excel
 
 ```bash
-python export.py
+python ingest/export.py
 ```
 
 This creates `r3d_export.xlsx` with one row per repository. Subjects,
