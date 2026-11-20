@@ -4,6 +4,39 @@ This project pulls repository data from the re3data API and stores it in a
 Postgres database. It has four tables: `repositories`, `subjects`,
 `contacts`, and `institutions`.
 
+## Normalize institution names (the main tool)
+
+The same institution appears in re3data under many spellings ("Université de Montpellier", "University of Montpellier"), and
+departments are listed next to their universities. `normalize.py` groups the spellings of each institution, picks one canonical
+name, and links a unit (a library, department) to its parent institution without merging the two.
+
+```bash
+pip install -r requirements.txt                          # once
+python normalize.py                                         # reads data/institutions_clean.csv, writes to out/
+```
+
+Use `--input` and `--out` for other files: `python normalize.py --input my_names.csv --out results/`.
+The input is a CSV with the columns `repo_id` and `institution_name`.
+
+| Output (in `out/`) | What it is |
+|---|---|
+| `normalized_names.csv` | one row per distinct name: `cluster_id`, `canonical_name`, `parent_name`, `parent_canonical`, `n_repos`, `cluster_size` |
+| `review_list.csv` | names a human should check, with the reason (rules in `review.py`) |
+| `report.txt` | counts and the five largest clusters |
+
+On the current data it turns 6,148 names into 5,589 institutions (559 spellings merged) and finds 1,455 parent links.
+
+How it works, in five steps: **blocking** (only compare names that share a rare word: 18.9 million possible pairs become about 270,000),
+**decider** (`decider.py`: simple rules label each pair duplicate, hierarchy or unrelated), **clusters** (`cluster.py`: duplicates merge),
+**canonical name** (the spelling used by the most repositories) and **parent links** (a name like "A, B, C" links to "A, B" or "A").
+It uses rules only, so the same input always gives the same output.
+
+Known limits: the rules miss abbreviations and translations, and a few groups are chained together through a shared short name
+(for example CLARIAH-ES, CLARIAH-NL and CLARIAH). Merge quality was measured on a random sample judged by an AI model, not by
+people; see `docs/poster_facts.md` for the numbers and how they were measured, and `docs/AUTHORSHIP.md` for who wrote what.
+
+Tests: `python -m pytest tests -q`.
+
 ## Project files
 
 - `ingest/fetch.py` — gets data from the re3data API
@@ -19,7 +52,7 @@ Run everything from the repository root, e.g. `python pipeline/judge.py ...`.
 
 | Folder / file | What it holds |
 |---|---|
-| `decider.py`, `cluster.py`, `evaluate_decider.py` | The rule-based pair decider, the clustering step in progress, and the harness that scores the decider |
+| `normalize.py`, `decider.py`, `cluster.py`, `review.py`, `evaluate_decider.py` | The one-command tool, the rule-based pair decider, clustering and parent links, the human-review flags, and the harness that scores the decider |
 | `pipeline/` | Data and labeling pipeline: ROR matching, candidate/mined pairs, the LLM judge, train/val/test split |
 | `experiments/` | Baselines, fine-tuning, error analysis, robustness checks, the combined pair model, clustering demo |
 | `slurm/` | Negishi job scripts (judge labeling, fine-tuning sweep) |
